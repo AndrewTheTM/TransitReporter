@@ -35,7 +35,7 @@ public class ReportTransit {
 				if(line.trim().substring(0,4).equals("NAME")){
 					String components[];
 					//TODO: fix the f**king regex string to get it working.
-					String regex="[\\s^'.*']"; //"(?<=^[^\"]*(?:\"[^\"]*\"[^\"]*)*) (?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"; //"[\\s=\"']+|\"([\"]*)\"|'([']*)'";
+					String regex="[\\s=\"']+|\"([\"]*)\"|'([']*)'";
 					components=line.split(regex);
 					int a=1;
 				}
