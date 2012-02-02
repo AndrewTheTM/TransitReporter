@@ -1,0 +1,21 @@
+*** STILL IN DEVELOPMENT ***
+
+========================================================================
+    CONSOLE APPLICATION : TransitReporter Project Overview
+========================================================================
+
+This is a console application that reports various statistics from Cube
+Voyager PT Lin files.  The application expects to recieve loaded files
+and will ultimately report various metrics, including:
+ - Line Group Volumes (using the USERN2 Field)
+ - County-County Summary
+ - Trip Length Frequency
+
+Programmed in Java using Eclipse
+
+Compile and run without options for program arguments.
+
+Author: Andrew Rohne - arohne@oki.org - www.oki.org
+License: 2012 GPLv3
+
+Tags: Cube, Cube-Voyager, C++, TDM, travel modeling, transportation, transportation modeling
