@@ -3,6 +3,9 @@
  */
 package org.oki.transmodel;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * @author arohne
  *
@@ -15,10 +18,11 @@ public class transitLine {
 	public int PMHeadway;
 	public int mode;
 	public boolean oneWay;
+	public boolean circular;
 	public int operator;
 	public int fareSystem;
 	public int reportGroup;
-	public transitNode[] nodes;
+	public List<transitNode> nodes;
 	
 	public transitLine(){
 		name="";
@@ -31,6 +35,10 @@ public class transitLine {
 		operator=0;
 		fareSystem=0;
 		reportGroup=0;
+		nodes=new ArrayList<transitNode>();
+	}
+	public void addNode(transitNode e){
+		nodes.add(e);
 	}
 
 }

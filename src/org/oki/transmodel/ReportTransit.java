@@ -2,8 +2,9 @@ package org.oki.transmodel;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
-import java.util.regex.Pattern;
 
 /**
  * @author arohne
@@ -13,17 +14,19 @@ public class ReportTransit {
 	/*
 	 * Main class for reporting transit from OKI Model
 	 */
+	private List<transitLine> transitLines=new ArrayList<transitLine>();
+	
 	public static void main(String[] args) throws FileNotFoundException{
 		System.out.println(args[0]);
 		ReportTransit.readLinFile(args[0]);
 	}
 	static void readLinFile(String filename) throws FileNotFoundException{
 		StringBuilder text=new StringBuilder();
-		String NL = System.getProperty("line.separator");
+		//String NL = System.getProperty("line.separator");
 		Scanner scanner = new Scanner(new FileInputStream(filename));
 		try{
 			while(scanner.hasNextLine()){
-				text.append(scanner.nextLine()+NL);
+				text.append(scanner.nextLine());
 			}
 		}
 		finally{
@@ -32,41 +35,217 @@ public class ReportTransit {
 			lineBlock=text.toString().split("LINE ");
 			for(String line : lineBlock){
 				System.out.println(line.trim().substring(0,4));
-				if(line.trim().substring(0,4).equals("NAME")){
-					String components[];
-					//TODO: fix the f**king regex string to get it working.
-					String regex="[\\s=\"']+|\"([\"]*)\"|'([']*)'";
-					components=line.split(regex);
-					int a=1;
-				}
+				transitLine tLine = new transitLine();
 				
+				if(line.trim().substring(0,4).equals("NAME")){
+					line=line.trim().replace(","," ");
+					int a=line.indexOf("NAME=")+5;
+					int c=line.indexOf(" ", a);
+					tLine.name=line.substring(a,c);
+					
+					a=line.indexOf("LONGNAME=")+9;
+					c=line.indexOf("' ",a);
+					tLine.longName=line.substring(a,c).replace("'", "").trim();
+					
+					a=line.indexOf("HEADWAY[1]=")+11;
+					if(a==10)
+						a=line.indexOf("HEADWAY")+8;
+					c=line.indexOf(" ",a);
+					tLine.AMHeadway=Integer.parseInt(line.substring(a,c));
+					
+					a=line.indexOf("HEADWAY[2]=")+11;
+					if(a>10)
+					{
+						c=line.indexOf(" ",a);
+						tLine.MDHeadway=Integer.parseInt(line.substring(a,c));
+					}else{
+						tLine.MDHeadway=0;
+					}
+					
+					a=line.indexOf("HEADWAY[3]=")+11;
+					if(a>10)
+					{
+						c=line.indexOf(" ",a);
+						tLine.PMHeadway=Integer.parseInt(line.substring(a,c));
+					}else{
+						tLine.PMHeadway=0;
+					}
+					
+					a=line.indexOf("MODE=")+5;
+					c=line.indexOf(" ",a);
+					tLine.mode=Integer.parseInt(line.substring(a,c));
+					
+					a=line.indexOf("ONEWAY=")+7;
+					if (a > 6) {
+						c = line.indexOf(" ", a);
+						if (line.substring(a, c) == "T")
+							tLine.oneWay = true;
+						else
+							tLine.oneWay = false;
+					}
+					a=line.indexOf("CIRCULAR=")+9;
+					if(a>8){
+						c=line.indexOf(" ", c);
+						if(line.substring(a,c)=="T")
+							tLine.circular=true;
+						else
+							tLine.circular=false;
+					}
+					
+					a=line.indexOf("OPERATOR=")+9;
+					c=line.indexOf(" ", a);
+					tLine.operator=Integer.parseInt(line.substring(a,c));
+					
+					a=line.indexOf("FARESYSTEM=")+11;
+					c=line.indexOf(" ", a);
+					tLine.fareSystem=Integer.parseInt(line.substring(a, c));
+					
+					a=line.indexOf("USERN2=")+7;
+					if(a>6)
+					{
+						c=line.indexOf(" ", a);
+						tLine.reportGroup=Integer.parseInt(line.substring(a,c));
+					}else{
+						tLine.reportGroup=0;
+					}
+					
+					//N
+					a=line.indexOf("N=")+2;
+					c=line.length();
+					String nEle[];
+					String nLine=line.substring(a, c);
+					nEle=nLine.split(" N=");
+					int sequ=0;
+					
+					for(String nElement : nEle){
+						transitNode tNode = new transitNode();
+						int onStart=nElement.indexOf("ON");
+						int offStart=nElement.indexOf("OFF");
+						int volStart=nElement.indexOf("VOL");
+						
+						//get N
+						if(onStart>0)
+							tNode.N=Integer.parseInt(nElement.substring(0,onStart).trim());
+						else if(offStart>0)
+							tNode.N=Integer.parseInt(nElement.substring(0,offStart).trim());
+						else if(volStart>0)
+							tNode.N=Integer.parseInt(nElement.substring(0,volStart).trim());
+						else
+							tNode.N=Integer.parseInt(nElement.trim());
+
+						//get On
+						if(onStart>0)
+						{
+							onStart+=2;
+							System.out.println(nElement.substring(onStart+1,onStart+2));
+							int startArray=0, onStartAdd=0;
+							if(nElement.substring(onStart,onStart+1).equals("["))
+							{
+								startArray=Integer.parseInt(nElement.substring(onStart+1,onStart+2));
+								onStartAdd=4;
+								
+							}
+							String tmp;
+							if(offStart>0)
+								tmp=nElement.substring(onStart+onStartAdd, offStart).replace("[", "").replace("]", "");
+							else if(volStart>0)
+								tmp=nElement.substring(onStart+onStartAdd, volStart).replace("[", "").replace("]", "");
+							else
+								tmp=nElement.substring(onStart+onStartAdd,nElement.length());
+							
+							String ele[];
+							ele=tmp.split("\\s");
+							for(int i=0;i<4;i++)
+							{
+								if(i>=startArray){
+									tNode.on[i]=Integer.parseInt(ele[i-startArray].trim());
+								}
+							}
+								//tNode.on[i+startArray-1]=Integer.parseInt(ele[i]);
+						}
+						
+						//get off
+						/*
+						if(offStart>0)
+						{
+							offStart+=3;
+							int startArray=0, onStartAdd=0;
+							if(nElement.substring(offStart, offStart+1).equals("["))
+							{
+								startArray=Integer.parseInt(nElement.substring(offStart+1,offStart+2));
+								onStartAdd=4;
+							}
+							String tmp;
+							if(volStart>0)
+								tmp=nElement.substring(offStart+onStartAdd, volStart).replace("[","").replace("]","");
+							else
+								tmp=nElement.substring(offStart+onStartAdd, nElement.length());
+							
+							String ele[];
+							ele=tmp.split("\\s");
+							for(int i=startArray-1;i<4;i++)
+								tNode.off[i]=Integer.parseInt(ele[startArray-1-i]);
+						}
+						*/
+						/*
+						//get vol
+						if(volStart>0)
+						{
+							volStart+=3;
+							int startArray=0, volStartAdd=0;
+							if(nElement.substring(volStart, volStart+1).equals("["))
+							{
+								startArray=Integer.parseInt(nElement.substring(volStart+1, volStart+2));
+								volStartAdd=4;
+							}
+							String tmp;
+							tmp=nElement.substring(volStart+volStartAdd,nElement.length());
+							String ele[];
+							ele=tmp.split("\\s");
+							for(int i=startArray-1;i<4;i++)
+								tNode.vol[i]=Integer.parseInt(ele[startArray-1-i]);
+						}
+						*/
+						tLine.nodes.add(tNode);
+						
+						//ON OFF VOL
+						int stopme=0;
+						/*
+						if(nElement.indexOf("VOL")>0){
+							int d=nElement.indexOf("VOL"+4);
+							int e=Math.max(nElement.indexOf("ON="),nElement.length());
+							String vols[];
+							vols=nElement.substring(d,e).split("\\s");
+							
+						}
+						*/
+					}
+					
+
+					/*
+					 * N=5939,
+				       ON=0 VOL=0 N=5486 ON=0 OFF=0 VOL=1 N=5552 ON=0 OFF=0 VOL=1 N=-5553 VOL=1,
+				       N=5596 VOL=1 N=5554 ON=5 OFF=0 VOL=6 N=5555 ON=3 OFF=1 VOL=8 N=5556 ON=0,
+				       VOL=8 N=8736 VOL=8 N=8747 VOL=8 N=8742 VOL=8 N=5557 OFF=0 VOL=8 N=-5558,
+				       VOL=8 N=-6047 VOL=8 N=-5602 VOL=8 N=-5603 VOL=8 N=5604 ON=3 OFF=1 VOL=10,
+				       N=6386 VOL=10 N=6387 VOL=10 N=5605 ON=1 OFF=1 VOL=10 N=5606 ON=1 OFF=1,
+				       VOL=10 N=5941 OFF=0 VOL=9 N=5484 ON=3 OFF=0 VOL=12 N=5942 ON=1 OFF=0 VOL=13,
+				       N=5460 ON=0 VOL=13 N=5459 ON=6 0 OFF=1 VOL=18 0 N=5457 ON=1 0 OFF=2 VOL=17 0,
+				       N=5945 ON=2 0 OFF=1 VOL=19 0 N=5456 ON=1 OFF=0 VOL=19 0 N=5455 OFF=1 VOL=18,
+				       0 N=5454 ON=1 0 VOL=20 0 N=5617 ON=1 OFF=0 VOL=20 0 N=5612 VOL=20 0,
+				       N=5626 VOL=20 0 N=5619 VOL=20 0 N=5618 ON=0 OFF=1 VOL=19 0 N=5974 ON=0 OFF=0,
+				       VOL=19 0 N=5723 ON=1 OFF=0 VOL=19 0 N=5722 ON=2 OFF=1 VOL=21 0 N=5721 ON=2 0,
+				       OFF=1 VOL=22 0 N=5725 OFF=0 VOL=22 0 N=5729 ON=0 VOL=22 0 N=5732 ON=0 OFF=1
+					 */
+
+					
+					/////\/\/\/\/\
+					int b=0;
+					System.out.println(line.trim().substring(a,c));
+					System.out.println(c);
+				}
 			}
 		}
-		
-		
-		
-		
-		/*
-		 * LINE  NAME=M4L68 LONGNAME='46 AVONVIEW IB' HEADWAY=15 HEADWAY[2]=13,
-	       MODE=1 ONEWAY=1 OPERATOR=1 FARESYSTEM=1 USERA1=46 USERN2=4 N=5745 ON=40 2,
-	       VOL=40 2 N=5743 ON=10 1 VOL=49 2 N=5741 VOL=49 2 N=5739 ON=16 1 OFF=1 VOL=64,
-	       4 N=6006 ON=28 2 OFF=2 0 VOL=91 5 N=5080 ON=2 1 ON[4]=0 OFF=7 0 VOL=86,
-	       6 VOL[4]=0 N=4977 ON=4 1 OFF=3 0 VOL=87 7 VOL[4]=0 N=4978 ON=5 4 6 0,
-	       OFF=26 1 VOL=66 10 6 0 N=5074 ON=4 0 OFF=0 VOL=70 10 6 0 N=5071 ON=2 1,
-	       VOL=71 11 6 0 N=5070 ON=9 1 3 0 OFF=5 0 VOL=76 12 9 0 N=5025 ON=1 1 OFF=3 0,
-	       VOL=74 12 9 0 N=5024 ON=14 2 OFF=0 0 VOL=87 14 9 0 N=5023 ON=7 2 1 OFF=4 0,
-	       VOL=91 15 9 0 N=5022 ON=9 1 OFF=1 0 VOL=99 15 9 0 N=4709 ON=4 0 OFF=1 0,
-	       VOL=102 16 9 0 N=4897 ON=36 6 1 OFF=32 2 VOL=106 19 11 0 N=4724 OFF=5 0,
-	       VOL=101 19 11 0 N=3259 VOL=101 19 11 0 N=4747 ON=6 0 OFF=7 0 VOL=101 19 11 0,
-	       N=4763 ON=21 3 OFF=3 0 VOL=119 22 11 0 N=3256 ON=3 0 OFF=6 0 VOL=115 22 11 0,
-	       N=4786 ON=1 VOL=116 22 11 0 N=4890 ON=9 2 OFF=26 1 VOL=98 23 11 0 N=4804,
-	       ON=0 VOL=99 23 11 0 N=4852 ON=1 OFF=4 1 VOL=95 22 11 0 N=-4203 VOL=95 22,
-	       11 0 N=-4217 VOL=95 22 11 0 N=-11852 VOL=95 22 11 0 N=-4230 VOL=95 22 11,
-	       0 N=-4247 VOL=95 22 11 0 N=-4272 VOL=95 22 11 0 N=-11840 VOL=95 22 11 0,
-	       N=-4268 VOL=95 22 11 0 N=-4285 VOL=95 22 11 0 N=-4306 VOL=95 22 11 0 N=-4320,
-	       VOL=95 22 11 0 N=-4333 VOL=95 22 11 0 N=4335 ON=3 2 2 OFF=58 13 1 VOL=41 11,
-	       11 0 N=-4337 VOL=41 11 11 0 N=4339 OFF=41 11 11 0
-		 */
 	}
 
 }
