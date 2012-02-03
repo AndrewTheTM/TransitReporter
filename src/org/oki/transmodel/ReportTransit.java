@@ -2,6 +2,10 @@ package org.oki.transmodel;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -14,15 +18,21 @@ public class ReportTransit {
 	/*
 	 * Main class for reporting transit from OKI Model
 	 */
-	private List<transitLine> transitLines=new ArrayList<transitLine>();
+	protected static List<transitLine> transitLines=new ArrayList<transitLine>();
 	
-	public static void main(String[] args) throws FileNotFoundException{
-		System.out.println(args[0]);
-		ReportTransit.readLinFile(args[0]);
+	public static void main(String[] args) throws IOException{
+		if(args.length==0){
+			System.out.println("You must supply an argument");
+		}
+		
+		ReportTransit.readAMLinFile(args[0]);
+		if(args.length>1)
+			ReportTransit.readMDLinFile(args[1]);
+		writeReport();
+		
 	}
-	static void readLinFile(String filename) throws FileNotFoundException{
+	static void readAMLinFile(String filename) throws FileNotFoundException{
 		StringBuilder text=new StringBuilder();
-		//String NL = System.getProperty("line.separator");
 		Scanner scanner = new Scanner(new FileInputStream(filename));
 		try{
 			while(scanner.hasNextLine()){
@@ -34,7 +44,6 @@ public class ReportTransit {
 			String lineBlock[];
 			lineBlock=text.toString().split("LINE ");
 			for(String line : lineBlock){
-				System.out.println(line.trim().substring(0,4));
 				transitLine tLine = new transitLine();
 				
 				if(line.trim().substring(0,4).equals("NAME")){
@@ -45,6 +54,8 @@ public class ReportTransit {
 					
 					a=line.indexOf("LONGNAME=")+9;
 					c=line.indexOf("' ",a);
+					if(c<0)
+						c=line.indexOf(" ",a);
 					tLine.longName=line.substring(a,c).replace("'", "").trim();
 					
 					a=line.indexOf("HEADWAY[1]=")+11;
@@ -85,8 +96,8 @@ public class ReportTransit {
 					}
 					a=line.indexOf("CIRCULAR=")+9;
 					if(a>8){
-						c=line.indexOf(" ", c);
-						if(line.substring(a,c)=="T")
+						c=line.indexOf(" ", a);
+						if(line.substring(a,c).equals("1"))
 							tLine.circular=true;
 						else
 							tLine.circular=false;
@@ -115,13 +126,14 @@ public class ReportTransit {
 					String nEle[];
 					String nLine=line.substring(a, c);
 					nEle=nLine.split(" N=");
-					int sequ=0;
+					int seq=1;
 					
 					for(String nElement : nEle){
 						transitNode tNode = new transitNode();
 						int onStart=nElement.indexOf("ON");
 						int offStart=nElement.indexOf("OFF");
 						int volStart=nElement.indexOf("VOL");
+						
 						
 						//get N
 						if(onStart>0)
@@ -136,116 +148,384 @@ public class ReportTransit {
 						//get On
 						if(onStart>0)
 						{
-							onStart+=2;
-							System.out.println(nElement.substring(onStart+1,onStart+2));
-							int startArray=0, onStartAdd=0;
-							if(nElement.substring(onStart,onStart+1).equals("["))
-							{
-								startArray=Integer.parseInt(nElement.substring(onStart+1,onStart+2));
-								onStartAdd=4;
-								
-							}
-							String tmp;
+							String onString;
 							if(offStart>0)
-								tmp=nElement.substring(onStart+onStartAdd, offStart).replace("[", "").replace("]", "");
+								onString=nElement.substring(onStart, offStart).trim();
 							else if(volStart>0)
-								tmp=nElement.substring(onStart+onStartAdd, volStart).replace("[", "").replace("]", "");
+								onString=nElement.substring(onStart, volStart).trim();
 							else
-								tmp=nElement.substring(onStart+onStartAdd,nElement.length());
+								onString=nElement.substring(onStart, nElement.length()).trim();
 							
+							//check if indexed... onString is either ON=n n n n or ON[x]=n n or ON=2 ON[3]=0
 							String ele[];
-							ele=tmp.split("\\s");
-							for(int i=0;i<4;i++)
-							{
-								if(i>=startArray){
-									tNode.on[i]=Integer.parseInt(ele[i-startArray].trim());
+							ele=onString.split("\\s");
+							int curEle=0;
+							for(String sEle:ele){
+								if(sEle.length()==0)
+								{
+									//maybe do nothing?
+								}else if(isInteger(sEle)){
+									tNode.on[curEle]=Integer.parseInt(sEle);
+									curEle++;
+								}else if(sEle.substring(0,3).equals("ON=")){
+									tNode.on[curEle]=Integer.parseInt(sEle.substring(3,sEle.length()));
+									curEle++;
+								}else if(sEle.substring(0,3).equals("ON[")){
+									curEle=Integer.parseInt(sEle.substring(3,4))-1;
+									tNode.on[curEle]=Integer.parseInt(sEle.substring(6, sEle.length()));
+									curEle++;
 								}
 							}
-								//tNode.on[i+startArray-1]=Integer.parseInt(ele[i]);
 						}
 						
 						//get off
-						/*
 						if(offStart>0)
 						{
-							offStart+=3;
-							int startArray=0, onStartAdd=0;
-							if(nElement.substring(offStart, offStart+1).equals("["))
-							{
-								startArray=Integer.parseInt(nElement.substring(offStart+1,offStart+2));
-								onStartAdd=4;
-							}
-							String tmp;
+							String offString;
 							if(volStart>0)
-								tmp=nElement.substring(offStart+onStartAdd, volStart).replace("[","").replace("]","");
+								offString=nElement.substring(offStart, volStart).trim();
 							else
-								tmp=nElement.substring(offStart+onStartAdd, nElement.length());
+								offString=nElement.substring(offStart, nElement.length()).trim();
 							
+							//check if indexed... onString is either ON=n n n n or ON[x]=n n or ON=2 ON[3]=0
 							String ele[];
-							ele=tmp.split("\\s");
-							for(int i=startArray-1;i<4;i++)
-								tNode.off[i]=Integer.parseInt(ele[startArray-1-i]);
+							ele=offString.split("\\s");
+							int curEle=0;
+							for(String sEle:ele){
+								if(sEle.length()==0)
+								{
+									//maybe do nothing?
+								}else if(isInteger(sEle)){
+									tNode.off[curEle]=Integer.parseInt(sEle);
+									curEle++;
+								}else if(sEle.substring(0,4).equals("OFF=")){
+									tNode.off[curEle]=Integer.parseInt(sEle.substring(4,sEle.length()));
+									curEle++;
+								}else if(sEle.substring(0,4).equals("OFF[")){
+									curEle=Integer.parseInt(sEle.substring(4,5))-1;
+									tNode.off[curEle]=Integer.parseInt(sEle.substring(7, sEle.length()));
+									curEle++;
+								}
+							}
 						}
-						*/
-						/*
 						//get vol
 						if(volStart>0)
 						{
-							volStart+=3;
-							int startArray=0, volStartAdd=0;
-							if(nElement.substring(volStart, volStart+1).equals("["))
-							{
-								startArray=Integer.parseInt(nElement.substring(volStart+1, volStart+2));
-								volStartAdd=4;
-							}
-							String tmp;
-							tmp=nElement.substring(volStart+volStartAdd,nElement.length());
-							String ele[];
-							ele=tmp.split("\\s");
-							for(int i=startArray-1;i<4;i++)
-								tNode.vol[i]=Integer.parseInt(ele[startArray-1-i]);
-						}
-						*/
-						tLine.nodes.add(tNode);
-						
-						//ON OFF VOL
-						int stopme=0;
-						/*
-						if(nElement.indexOf("VOL")>0){
-							int d=nElement.indexOf("VOL"+4);
-							int e=Math.max(nElement.indexOf("ON="),nElement.length());
-							String vols[];
-							vols=nElement.substring(d,e).split("\\s");
+							String volString;
+							volString=nElement.substring(volStart, nElement.length()).trim();
 							
+							//check if indexed... onString is either ON=n n n n or ON[x]=n n or ON=2 ON[3]=0
+							String ele[];
+							ele=volString.split("\\s");
+							int curEle=0;
+							for(String sEle:ele){
+								if(sEle.length()==0)
+								{
+									//maybe do nothing?
+								}else if(isInteger(sEle)){
+									tNode.vol[curEle]=Integer.parseInt(sEle);
+									curEle++;
+								}else if(sEle.substring(0,4).equals("VOL=")){
+									tNode.vol[curEle]=Integer.parseInt(sEle.substring(4,sEle.length()));
+									curEle++;
+								}else if(sEle.substring(0,4).equals("VOL[")){
+									curEle=Integer.parseInt(sEle.substring(4,5))-1;
+									tNode.vol[curEle]=Integer.parseInt(sEle.substring(7, sEle.length()));
+									curEle++;
+								}
+							}
 						}
-						*/
+						
+						tNode.seq=seq;
+						seq++;
+						tLine.nodes.add(tNode);	
 					}
+					transitLines.add(tLine);
 					
+				} //line name block
+			} // line for loop
+		} // finally
+	} // static void
+	
+	static void readMDLinFile(String filename) throws FileNotFoundException{
+		StringBuilder text = new StringBuilder();
+		Scanner scanner = new Scanner(new FileInputStream(filename));
+		try {
+			while (scanner.hasNextLine()) {
+				text.append(scanner.nextLine());
+			}
+		} finally {
+			scanner.close();
+			String lineBlock[];
+			lineBlock = text.toString().split("LINE ");
+			for (String line : lineBlock) {
+				// transitLine tLine = new transitLine();
+				String cLine;
+				if (line.trim().substring(0, 4).equals("NAME")) {
+					line = line.trim().replace(",", " ");
+					int a = line.indexOf("NAME=") + 5;
+					int c = line.indexOf(" ", a);
+					cLine = line.substring(a, c);
 
-					/*
-					 * N=5939,
-				       ON=0 VOL=0 N=5486 ON=0 OFF=0 VOL=1 N=5552 ON=0 OFF=0 VOL=1 N=-5553 VOL=1,
-				       N=5596 VOL=1 N=5554 ON=5 OFF=0 VOL=6 N=5555 ON=3 OFF=1 VOL=8 N=5556 ON=0,
-				       VOL=8 N=8736 VOL=8 N=8747 VOL=8 N=8742 VOL=8 N=5557 OFF=0 VOL=8 N=-5558,
-				       VOL=8 N=-6047 VOL=8 N=-5602 VOL=8 N=-5603 VOL=8 N=5604 ON=3 OFF=1 VOL=10,
-				       N=6386 VOL=10 N=6387 VOL=10 N=5605 ON=1 OFF=1 VOL=10 N=5606 ON=1 OFF=1,
-				       VOL=10 N=5941 OFF=0 VOL=9 N=5484 ON=3 OFF=0 VOL=12 N=5942 ON=1 OFF=0 VOL=13,
-				       N=5460 ON=0 VOL=13 N=5459 ON=6 0 OFF=1 VOL=18 0 N=5457 ON=1 0 OFF=2 VOL=17 0,
-				       N=5945 ON=2 0 OFF=1 VOL=19 0 N=5456 ON=1 OFF=0 VOL=19 0 N=5455 OFF=1 VOL=18,
-				       0 N=5454 ON=1 0 VOL=20 0 N=5617 ON=1 OFF=0 VOL=20 0 N=5612 VOL=20 0,
-				       N=5626 VOL=20 0 N=5619 VOL=20 0 N=5618 ON=0 OFF=1 VOL=19 0 N=5974 ON=0 OFF=0,
-				       VOL=19 0 N=5723 ON=1 OFF=0 VOL=19 0 N=5722 ON=2 OFF=1 VOL=21 0 N=5721 ON=2 0,
-				       OFF=1 VOL=22 0 N=5725 OFF=0 VOL=22 0 N=5729 ON=0 VOL=22 0 N=5732 ON=0 OFF=1
-					 */
+					for (transitLine tLine : transitLines) {
+						if (tLine.name.equals(cLine)) {
 
-					
-					/////\/\/\/\/\
-					int b=0;
-					System.out.println(line.trim().substring(a,c));
-					System.out.println(c);
+							// N
+							a = line.indexOf("N=") + 2;
+							c = line.length();
+							String nEle[];
+							String nLine = line.substring(a, c);
+							nEle = nLine.split(" N=");
+
+							for (String nElement : nEle) {
+								int onStart = nElement.indexOf("ON");
+								int offStart = nElement.indexOf("OFF");
+								int volStart = nElement.indexOf("VOL");
+
+								int theN;
+
+								// get N
+								if (onStart > 0)
+									theN = Integer.parseInt(nElement.substring(0, onStart).trim());
+								else if (offStart > 0)
+									theN = Integer.parseInt(nElement.substring(0, offStart).trim());
+								else if (volStart > 0)
+									theN = Integer.parseInt(nElement.substring(0, volStart).trim());
+								else
+									theN = Integer.parseInt(nElement.trim());
+
+								for (transitNode tNode : tLine.nodes) {
+									if (tNode.N == theN) {
+
+										// get On
+										if (onStart > 0) {
+											String onString;
+											if (offStart > 0)
+												onString = nElement.substring(onStart, offStart).trim();
+											else if (volStart > 0)
+												onString = nElement.substring(onStart, volStart).trim();
+											else
+												onString = nElement.substring(onStart,nElement.length()).trim();
+
+											// check if indexed... onString is
+											// either ON=n n n n or ON[x]=n n or
+											// ON=2 ON[3]=0
+											String ele[];
+											ele = onString.split("\\s");
+											int curEle = 4;
+											for (String sEle : ele) {
+												if (sEle.length() == 0) {
+													// maybe do nothing?
+												} else if (isInteger(sEle)) {
+													tNode.on[curEle] = Integer.parseInt(sEle);
+													curEle++;
+												} else if (sEle.substring(0, 3).equals("ON=")) {
+													tNode.on[curEle] = Integer.parseInt(sEle.substring(3,sEle.length()));
+													curEle++;
+												} else if (sEle.substring(0, 3).equals("ON[")) {
+													curEle = Integer.parseInt(sEle.substring(3,	4)) +3;
+													tNode.on[curEle] = Integer.parseInt(sEle.substring(6,sEle.length()));
+													curEle++;
+												}
+											}
+										}
+
+										// get off
+										if (offStart > 0) {
+											String offString;
+											if (volStart > 0)
+												offString = nElement.substring(offStart, volStart).trim();
+											else
+												offString = nElement.substring(offStart,nElement.length()).trim();
+
+											// check if indexed... onString is
+											// either ON=n n n n or ON[x]=n n or
+											// ON=2 ON[3]=0
+											String ele[];
+											ele = offString.split("\\s");
+											int curEle = 4;
+											for (String sEle : ele) {
+												if (sEle.length() == 0) {
+													// maybe do nothing?
+												} else if (isInteger(sEle)) {
+													tNode.off[curEle] = Integer.parseInt(sEle);
+													curEle++;
+												} else if (sEle.substring(0, 4).equals("OFF=")) {
+													tNode.off[curEle] = Integer.parseInt(sEle.substring(4,sEle.length()));
+													curEle++;
+												} else if (sEle.substring(0, 4).equals("OFF[")) {
+													curEle = Integer.parseInt(sEle.substring(4,5)) +3;
+													tNode.off[curEle] = Integer.parseInt(sEle.substring(7,sEle.length()));
+													curEle++;
+												}
+											}
+										}
+										// get vol
+										if (volStart > 0) {
+											String volString;
+											volString = nElement.substring(volStart,nElement.length()).trim();
+
+											// check if indexed... onString is
+											// either ON=n n n n or ON[x]=n n or
+											// ON=2 ON[3]=0
+											String ele[];
+											ele = volString.split("\\s");
+											int curEle = 4;
+											for (String sEle : ele) {
+												if (sEle.length() == 0) {
+													// maybe do nothing?
+												} else if (isInteger(sEle)) {
+													tNode.vol[curEle] = Integer.parseInt(sEle);
+													curEle++;
+												} else if (sEle.substring(0, 4)
+														.equals("VOL=")) {
+													tNode.vol[curEle] = Integer.parseInt(sEle.substring(4,sEle.length()));
+													curEle++;
+												} else if (sEle.substring(0, 4).equals("VOL[")) {
+													curEle = Integer.parseInt(sEle.substring(4,5)) +3;
+													tNode.vol[curEle] = Integer.parseInt(sEle.substring(7,sEle.length()));
+													curEle++;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 	}
-
+	
+	public static boolean isInteger(String input)
+	{
+		try
+		{
+			Integer.parseInt(input);
+			return true;
+		}catch(Exception e){
+			return false;
+		}
+	}
+	
+	public static void dumpLines(){
+		for(transitLine tLine:transitLines)
+		{
+			System.out.println(tLine.name+", "+tLine.getAMBoardings()+", "+tLine.getMDBoardings()+", "+tLine.getTotalBoardings());
+		}
+	}
+	
+	public static void writeReport() throws IOException{
+		System.out.println("Writing Report File...");
+		Writer out=new OutputStreamWriter(new FileOutputStream("C:\\Temp\\Step63.RPT"));
+		try{
+			out.write((char)27+"&l0O"+(char)27+"(s18H"+(char)27+"&l8D\r\n");
+			out.write("OKI MODEL TRANSIT REPORT\r\n\n");
+			out.write("                       TRANSIT BOARDINGS BY CORRIDOR\r\n");
+			//&l1O(s18H&l8D
+		
+			//Write corridor level report
+			int[][] corridorBoards=new int[14][3];
+			int[][] companyBoards=new int[10][3];
+			int[][] modeBoards=new int[10][3];
+			int[][][] modeCoBoards=new int[10][10][3];
+			
+			
+			for(transitLine tLine:transitLines)
+			{
+				corridorBoards[tLine.reportGroup][0]+=tLine.getAMBoardings();
+				corridorBoards[tLine.reportGroup][1]+=tLine.getMDBoardings();
+				corridorBoards[tLine.reportGroup][2]+=tLine.getAMBoardings()+tLine.getMDBoardings();
+				companyBoards[tLine.operator][0]+=tLine.getAMBoardings();
+				companyBoards[tLine.operator][1]+=tLine.getMDBoardings();
+				companyBoards[tLine.operator][2]+=tLine.getAMBoardings()+tLine.getMDBoardings();
+				modeBoards[tLine.mode][0]+=tLine.getAMBoardings();
+				modeBoards[tLine.mode][1]+=tLine.getMDBoardings();
+				modeBoards[tLine.mode][2]+=tLine.getAMBoardings()+tLine.getMDBoardings();
+				modeCoBoards[tLine.mode][tLine.operator][0]+=tLine.getAMBoardings();
+				modeCoBoards[tLine.mode][tLine.operator][1]+=tLine.getMDBoardings();
+				modeCoBoards[tLine.mode][tLine.operator][2]+=tLine.getAMBoardings()+tLine.getMDBoardings();
+			}
+			
+			//out.write("|"+String.format(String.format("%%0%dd", 80), 0).replace("0","-")+"|");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|  CORRIDOR   |  PEAK BOARDINGS  |  OFF-PK BOARDINGS  |  TOTAL BOARDINGS   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			int rtAMB=0, rtMDB=0, rtTTB=0;
+			for(int i=1;i<14;i++)
+			{
+				out.write("|    "+String.format("%1$2d",i)+"       |"+String.format("%,16d",corridorBoards[i][0])+"  |"+String.format("%,18d",corridorBoards[i][1])+"  |"+String.format("%,17d",corridorBoards[i][2])+"   |\r\n");
+				rtAMB+=corridorBoards[i][0];
+				rtMDB+=corridorBoards[i][1];
+				rtTTB+=corridorBoards[i][2];
+			}
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|     TOTAL   |"+String.format("%,16d", rtAMB)+"  |"+String.format("%,18d", rtMDB)+"  |"+String.format("%,17d",rtTTB)+"   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n\n\n");
+			
+			out.write("                       TRANSIT BOARDINGS BY COMPANY\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|   COMPANY   |  PEAK BOARDINGS  |  OFF-PK BOARDINGS  |  TOTAL BOARDINGS   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			rtAMB=0; rtMDB=0; rtTTB=0;
+			for(int i=1;i<7;i++)
+			{
+				out.write("|    "+String.format("%1$2d",i)+"       |"+String.format("%,16d",companyBoards[i][0])+"  |"+String.format("%,18d",companyBoards[i][1])+"  |"+String.format("%,17d",companyBoards[i][2])+"   |\r\n");
+				rtAMB+=companyBoards[i][0];
+				rtMDB+=companyBoards[i][1];
+				rtTTB+=companyBoards[1][2];
+			}
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|     TOTAL   |"+String.format("%,16d", rtAMB)+"  |"+String.format("%,18d", rtMDB)+"  |"+String.format("%,17d",rtTTB)+"   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n\n\n");
+			
+			out.write("                           TRANSIT BOARDINGS BY MODE\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|      MODE   |  PEAK BOARDINGS  |  OFF-PK BOARDINGS  |  TOTAL BOARDINGS   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			rtAMB=0; rtMDB=0; rtTTB=0;
+			for(int i=1;i<6;i++)
+			{
+				out.write("|    "+String.format("%1$2d",i)+"       |"+String.format("%,16d",modeBoards[i][0])+"  |"+String.format("%,18d",modeBoards[i][1])+"  |"+String.format("%,17d",modeBoards[i][2])+"   |\r\n");
+				rtAMB+=modeBoards[i][0];
+				rtMDB+=modeBoards[i][1];
+				rtTTB+=modeBoards[1][2];
+			}
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|     TOTAL   |"+String.format("%,16d", rtAMB)+"  |"+String.format("%,18d", rtMDB)+"  |"+String.format("%,17d",rtTTB)+"   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n\n\n");
+			
+			
+			out.write("                    TRANSIT BOARDINGS BY MODE AND COMPANY\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("| CO |  MODE  |  PEAK BOARDINGS  |  OFF-PK BOARDINGS  |  TOTAL BOARDINGS   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			
+			rtAMB=0; rtMDB=0; rtTTB=0;
+			for(int c=1;c<7;c++)
+			{
+				for(int m=1;m<6;m++)
+				{
+					if(modeCoBoards[m][c][2]>0)
+					{
+						out.write("| "+String.format("%2d",c)+" |  "+String.format("%1$4d",m)+"  |"+String.format("%,16d", modeCoBoards[m][c][0])+"  |"+String.format("%,18d",modeCoBoards[m][c][1])+"  |"+String.format("%,17d",modeCoBoards[m][c][2])+"   |\r\n");
+						rtAMB+=modeCoBoards[m][c][0];
+						rtMDB+=modeCoBoards[m][c][1];
+						rtTTB+=modeCoBoards[m][c][2];
+					}
+				}
+			}
+			out.write("+--------------------------------------------------------------------------+\r\n");
+			out.write("|     TOTAL   |"+String.format("%,16d", rtAMB)+"  |"+String.format("%,18d", rtMDB)+"  |"+String.format("%,17d",rtTTB)+"   |\r\n");
+			out.write("+--------------------------------------------------------------------------+\r\n\n\n");
+			//out.write((char)27+"&l0H");  //eject page
+			//out.write("This should be page 2");
+		}finally{
+			out.close();
+			System.out.println("Completed!");
+		}
+		
+	}
+	
 }
